@@ -434,14 +434,14 @@ class Microgrid():
             self.microgrid_statu = 'shortage'
         else:
             self.microgrid_statu = 'ok'
-        
+
 
         # calcul le payoff u_i(x_i, x__i) du joueur i, avec l'action joué x=(x_1, ...., xn)
         for t in transactions:
-            pen_seller = self.penalization(self.agents[t.seller.id].price, moy, 0.1)
+            pen_seller = self.penalization(self.agents[t.seller.id].price, moy, 0.05)
             L_payoffs[t.seller.id] += t.price * t.quantity - pen_seller  # - cost(t.quantity/2.)
 
-            pen_buyer = self.penalization(self.agents[t.buyer.id].price, moy, 0.1)
+            pen_buyer = self.penalization(self.agents[t.buyer.id].price, moy, 0.05)
             L_payoffs[t.buyer.id] += -1*(t.price * t.quantity) - pen_buyer  # - cost(t.quantity/2.)
 
         return L_payoffs
@@ -505,6 +505,9 @@ if __name__ == '__main__':
         agent.price = random.choice(liste_prix)
 
     moyenne = env.get_weighted_moy()
-    liste_trx = env.tournoi(moyenne)
-    for k in liste_trx:
+    payoffs = env.payoffs(moyenne)
+    #liste_trx = env.tournoi(moyenne)
+    print(f'moyenne:{moyenne}')
+
+    for k in payoffs:
         print(k)
