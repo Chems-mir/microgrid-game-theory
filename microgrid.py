@@ -438,10 +438,12 @@ class Microgrid():
 
         # calcul le payoff u_i(x_i, x__i) du joueur i, avec l'action joué x=(x_1, ...., xn)
         for t in transactions:
-            pen_seller = self.penalization(self.agents[t.seller.id].price, moy, 0.05)
+            pen_seller = self.penalization(self.agents[t.seller.id].price, moy, 0.12)
+            print('pen seller', pen_seller)
             L_payoffs[t.seller.id] += t.price * t.quantity - pen_seller  # - cost(t.quantity/2.)
 
-            pen_buyer = self.penalization(self.agents[t.buyer.id].price, moy, 0.05)
+            pen_buyer = self.penalization(self.agents[t.buyer.id].price, moy, 0.12)
+            print('pen buyer', pen_buyer)
             L_payoffs[t.buyer.id] += -1*(t.price * t.quantity) - pen_buyer  # - cost(t.quantity/2.)
 
         return L_payoffs
