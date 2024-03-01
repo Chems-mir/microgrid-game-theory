@@ -1,48 +1,27 @@
+import Microgrid as M
+
 class Microgridmulti(MultiAgentEnv):
     def __init__(self, config):
-        self.nb_agents = config['n']
-        self.L_conso = config['L_conso']
-        self.L_prod =  [x + y for x, y in zip(config['L_solar'], config['L_eolien'])]
+        self.nb_microgrids = config['nb_microgrids']
         self.eval = False
-
-        assert(self.nb_agents == len(self.L_conso) and self.nb_agents == len(self.L_prod))
-
-        self.agents = {} #contient les joueurs en tant qu'objet
-        liste_players = []
-
-        Joueur.cpt =0
-        #J(demand, produced, localisation, action):
-        for i in range(self.nb_agents):
-            h = Joueur(self.L_conso[i][0], self.L_prod[i][0], [0,1])
-            liste_players.append(h)
-            self.agents[i] = h
+        self.liste_microgrids = config['L_microgrids']
 
 
-        self.liste_players_init = copy.deepcopy(liste_players)
-        self._agents_ids = set(self.agents.keys())
-
-        self.liste_prix = config['liste_prix']
+        self.liste_microgrids_init = copy.deepcopy(self.liste_microgrids)
         self.current_timestep = 0
         self.max_timesteps = 23
 
-        self.demand_total_init = config['demand_total_prec']
-        self.supply_total_init = config['supply_total_prec']
-        self.avg_price_init = config['avg_price_old']
+        
+        self.liste_microgrids_buyers = []
+        self.liste_microgrids_sellers = []
 
-        self.Demand_total_old = config['demand_total_prec']
-        self.Supply_total_old = config['supply_total_prec']
-        self.avg_price_old = config['avg_price_old']
-
-        self.liste_buyers = []
-        self.liste_sellers = []
-
-        for i in self._agents_ids:
-            if self.agents[i].demand > 0.0 and self.agents[i].demand >self.agents[i].supply:
-                self.agents[i].statu = 'buyer'
-                self.liste_buyers.append(self.agents[i])
-            elif self.agents[i].supply > 0.0 and self.agents[i].supply >self.agents[i].demand:
-                self.agents[i].statu = 'seller'
-                self.liste_sellers.append(self.agents[i])
+        for i in self.liste_microgrids:
+            if i.microgrid_statu == 'shortage':
+                self.liste_microgrids_buyers.append(i)
+            elif i.microgrid_statu == 'surplus':
+                self.liste_microgrids_sellers.append(i)
+            else:
+                pass
 
         self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
         self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
