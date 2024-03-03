@@ -2,18 +2,145 @@ import Microgrid as M
 
 class Microgridmulti(MultiAgentEnv):
     def __init__(self, config):
-        self.nb_microgrids = config['nb_microgrids']
+        
         self.eval = False
         self.liste_microgrids = config['L_microgrids']
-
-
+        self.nb_microgrids = len(self.liste_microgrids)
         self.liste_microgrids_init = copy.deepcopy(self.liste_microgrids)
         self.current_timestep = 0
         self.max_timesteps = 23
-
         
         self.liste_microgrids_buyers = []
         self.liste_microgrids_sellers = []
+
+        #for one agent:
+        self.action_space = Discrete(len(self.liste_prix)) #correspond à l'indice dans la liste de prix possible
+        self.observation_space = Box(low=np.array([-1, 0 ,0, 0, 0, 0, 0], dtype=np.float32), high=np.array([1, 10, 100, 100, 100, 100, 1], dtype=np.float32), shape=(7,), dtype=np.float32)
+        
+        self.info = {(i,j): {} for i in range(self.nb_microgrids) for j in range(len(self.liste_microgrids[i].nb_agents))} #i correspond au num du microgrid, et j au numero de house
+    
+
+    def get_observation(self, microgrid_id, agent_id):
+        if self.liste_microgrids[microgrid_id].agents[agent_id].statu == 'seller':
+            return np.array([1, self.liste_microgrids[microgrid_id].agents[agent_id].supply , self.liste_microgrids[microgrid_id].Demand_total_old, self.liste_microgrids[microgrid_id].Demand_total, self.liste_microgrids[microgrid_id].Supply_total_old,  self.liste_microgrids[microgrid_id].Supply_total, self.liste_microgrids[microgrid_id].avg_price_old], dtype=np.float32)
+        elif self.agents[agent_id].statu == 'buyer':
+            return np.array([-1, self.liste_microgrids[microgrid_id].agents[agent_id].demand, self.liste_microgrids[microgrid_id].Demand_total_old,  self.liste_microgrids[microgrid_id].Demand_total, self.liste_microgrids[microgrid_id].Supply_total_old,  self.liste_microgrids[microgrid_id].Supply_total, self.liste_microgrids[microgrid_id].avg_price_old], dtype=np.float32)
+        else:
+            return np.array([0, 0, self.liste_microgrids[microgrid_id].Demand_total_old, self.liste_microgrids[microgrid_id].Demand_total, self.liste_microgrids[microgrid_id].Supply_total_old, self.liste_microgrids[microgrid_id].Supply_total, self.liste_microgrids[microgrid_id].avg_price_old], dtype=np.float32)
+
+    def get_reward(self, microgrid_id, agent_id):
+        return self.liste_microgrids[microgrid_id].agents[agent_id].payoff
+
+    def is_done(self, microgrid_id, agent_id):
+        if self.current_timestep > self.max_timesteps :
+            return True
+        else:
+            return False
+
+
+    def reset(self):
+        res ={}
+        for m in range(len(self.liste_microgrids)):
+            d = self.liste_microgrids[m].reset() #retourne un dictionnaire d'observation du microgrid
+            for key, value in d.items():
+                res[(m,key)] = value  
+        return res
+
+    def closest_pair_microgrids(self):
+
+        if not self.liste_microgrids_buyers or not self.liste_microgrids_sellers:
+            return None  
+        # Sort the lists in ascending order based on the 'number' attribute
+        self.liste_microgrids_buyers.sort(key=lambda x: x.price)
+        self.liste_microgrids_sellers.sort(key=lambda x: x.price)
+
+        closest_pair = None
+        min_distance = float('inf')
+
+        # Iterate through elements in liste_microgrids_buyers, comparing with a limited window in liste_microgrids_sellers
+        for i, x in enumerate(self.liste_microgrids_buyers):
+            # Define a search window in liste_microgrids_sellers based on the current element in liste_microgrids_buyers
+            low = max(0, i - len(self.liste_microgrids_sellers) // 2)  # Lower bound (avoid negative index)
+            high = min(len(self.liste_microgrids_sellers), i + len(self.liste_microgrids_sellers) // 2 + 1)  # Upper bound (avoid exceeding list length)
+
+            for j in range(low, high):
+                y = self.liste_microgrids_sellers[j]
+                distance = abs(x.price - y.price)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_pair = (x, y)
+
+            # Early termination if a pair with distance 0 is found
+            if min_distance == 0:
+                break
+
+        return closest_pair
+
+
+    def step(self, action_dict):
+
+        Liste_payoffs = [[None] * self.liste_microgrids[m].nb_agents for m in range(self.nb_microgrids)]
+        # Execute action
+        for m in range(len(self.liste_microgrids)):
+            for i in range(self.liste_microgrids[m].nb_agents):
+                self.liste_microgrids[m].agents[i].price = self.liste_prix[action_dict[(m,i)]]
+        
+            self.liste_microgrids[m].Demand_total_old = self.liste_microgrids[m].Demand_total
+            self.liste_microgrids[m].Supply_total_old = self.liste_microgrids[m].Supply_total
+
+            #determination des coeff lambda and avg
+            self.liste_microgrids[m].avg_price = self.liste_microgrids[m].get_weighted_moy()
+            for i in self.liste_microgrids[m]._agents_ids:
+                self.liste_microgrids[m].info[(m,i)] = {"avg_price": self.liste_microgrids[m].avg_price, "agent_price": self.liste_microgrids[m].agents[i].price}
+
+            #calcul des payoffs
+            Liste_payoffs[m] = self.liste_microgrids[m].payoffs(self.liste_microgrids[m].avg_price)
+            for id in self.liste_microgrids[m]._agents_ids:
+                self.liste_microgrids[m].agents[id].payoff += Liste_payoffs[m][id]
+
+         # Update players listes to reflect the new state after transactions
+         # mettre a jour la nouvelle demand et supply du nouveau timestep, les listes de players; buyers, seller
+         # et demand total supply total precedent
+
+            self.liste_microgrids[m].avg_price_old = self.liste_microgrids[m].avg_price
+
+            for a in self.liste_microgrids[m]._agents_ids:
+                self.liste_microgrids[m].agents[a].demand = self.liste_microgrids[m].L_conso[a][self.current_timestep]
+                self.liste_microgrids[m].agents[a].supply = max(0,self.liste_microgrids[m].L_prod[a][self.current_timestep] - self.liste_microgrids[m].agents[a].demand)
+                if self.liste_microgrids[m].agents[a].supply > self.liste_microgrids[m].agents[a].demand:
+                    self.liste_microgrids[m].agents[a].statu = 'seller'
+                elif self.liste_microgrids[m].agents[a].supply < self.liste_microgrids[m].agents[a].demand:
+                    self.liste_microgrids[m].agents[a].statu = 'buyer'
+                else:
+                    self.liste_microgrids[m].agents[a].statu = 'observator'
+
+
+            self.liste_microgrids[m].liste_buyers = []
+            self.liste_microgrids[m].liste_sellers = []
+
+            for i in self.liste_microgrids[m]._agents_ids:
+                #print(i)
+                #print(self.agents[i])
+                if self.liste_microgrids[m].agents[i].demand > 0.0 and self.liste_microgrids[m].agents[i].demand >self.liste_microgrids[m].agents[i].supply:
+                    self.liste_microgrids[m].agents[i].statu = 'buyer'
+                    self.liste_microgrids[m].liste_buyers.append(self.liste_microgrids[m].agents[i])
+                elif self.liste_microgrids[m].agents[i].supply > 0.0 and self.liste_microgrids[m].agents[i].supply >self.liste_microgrids[m].agents[i].demand:
+                    self.liste_microgrids[m].agents[i].statu = 'seller'
+                    self.liste_microgrids[m].liste_sellers.append(self.liste_microgrids[m].agents[i])
+
+            #self.liste_microgrids[m].Demand_total = sum(buyer.demand for buyer in self.liste_microgrids[m].liste_buyers)
+            #self.liste_microgrids[m].Supply_total = sum(seller.supply for seller in self.liste_microgrids[m].liste_sellers) 
+
+            #update statu of microgrid
+            self.liste_microgrids[m].microgrid_energy = self.liste_microgrids[m].Supply_total - self.liste_microgrids[m].Demand_total 
+            
+            if self.liste_microgrids[m].microgrid_energy > 0:
+                self.liste_microgrids[m].microgrid_statu = 'surplus'
+            elif self.liste_microgrids[m].microgrid_energy < 0:
+                self.liste_microgrids[m].microgrid_statu = 'shortage'
+            else:
+                self.liste_microgrids[m].microgrid_statu = 'ok'
+
 
         for i in self.liste_microgrids:
             if i.microgrid_statu == 'shortage':
@@ -23,441 +150,50 @@ class Microgridmulti(MultiAgentEnv):
             else:
                 pass
 
-        self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
-        self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
-        self.avg_price = 0
 
-        self.action_space = Discrete(len(self.liste_prix))
-        self.observation_space = Box(low=np.array([-1, 0 ,0, 0, 0, 0, 0], dtype=np.float32), high=np.array([1, 10, 100, 100, 100, 100, 1], dtype=np.float32), shape=(7,), dtype=np.float32)
-        self.info = {i: {} for i in self._agents_ids}
+        while(len(self.liste_microgrids_sellers) > 0 and len(self.liste_microgrids_buyers) > 0):
+            microgrid_buyer, microgrid_seller = self.closest_pair_microgrids()
+            qtity = min(abs(microgrid_buyer.microgrid_energy), microgrid_seller.microgrid_energy)
 
+            nb_buyers = len(microgrid_buyer.liste_buyers)
+            nb_sellers = len(microgrid_seller.liste_sellers)
+            
+            for b in microgrid_buyer.liste_buyers:
+                b.demand -= qtity/nb_buyers
 
-    def get_observation(self, agent_id):
-        if self.agents[agent_id].statu == 'seller':
-            return np.array([1, self.agents[agent_id].supply , self.Demand_total_old, self.Demand_total, self.Supply_total_old,  self.Supply_total, self.avg_price_old], dtype=np.float32)
-        elif self.agents[agent_id].statu == 'buyer':
-            return np.array([-1, self.agents[agent_id].demand, self.Demand_total_old,  self.Demand_total, self.Supply_total_old,  self.Supply_total, self.avg_price_old], dtype=np.float32)
-        else:
-            return np.array([0, 0, self.Demand_total_old, self.Demand_total, self.Supply_total_old, self.Supply_total, self.avg_price_old], dtype=np.float32)
+            for s in microgrid_seller.liste_sellers:
+                s.supply -= qtity/nb_sellers
 
-    def get_reward(self, agent_id):
-        return self.agents[agent_id].payoff
+            
 
-    def is_done(self, agent_id):
-        if self.current_timestep >= self.max_timesteps :
-            return True
-        else:
-            return False
+            microgrid_buyer.microgrid_energy += qtity
+            microgrid_seller.microgrid_energy -= qtity
+            if microgrid_buyer.microgrid_energy == 0:
+                self.liste_microgrids_buyers.remove(microgrid_buyer)
+            if microgrid_seller.microgrid_energy == 0:
+                self.liste_microgrids_sellers.remove(microgrid_seller)     
 
-    def reset(self):
 
-        for i in range(len(self.L_conso)):
-            if self.eval == False:
-                self.L_conso[i] = randomize_data(self.L_conso[i])
-                self.L_prod[i] =  randomize_data(self.L_prod[i])
-                if any(x > 6 for x in  self.L_conso[i]):
-                    print('erreur 900 ', self.L_conso[i])
-                if any(x > 6 for x in  self.L_prod[i]):
-                    print('erreur 900 ', self.L_prod[i])
-            else:
-                self.L_conso[i] = randomize_data(self.L_conso[i], eval = True)
-                self.L_prod[i] =  randomize_data(self.L_prod[i], eval = True)
 
-        self.agents = {} #contient les joueurs en tant qu'objet
-        liste_players = []
 
-        Joueur.cpt =0
-        #J(demand, produced, localisation, action):
-        for i in range(self.nb_agents):
-            h = Joueur(self.L_conso[i][0], self.L_prod[i][0], [0,1])
-            liste_players.append(h)
-            self.agents[i] = h
 
-        self.nb_agents = len(self.agents)
-        self._agents_ids = set(self.agents.keys())
-        self.current_timestep = 0
 
-        self.Demand_total_old = self.demand_total_init
-        self.Supply_total_old = self.supply_total_init
-        self.avg_price_old = self.avg_price_init
+#---------------------- completer les echanges
 
-        self.liste_buyers = []
-        self.liste_sellers = []
-
-        for i in self._agents_ids:
-          #  print(self.agents[i])
-            if self.agents[i].demand > 0.0 and self.agents[i].demand >self.agents[i].supply:
-                self.agents[i].statu = 'buyer'
-                self.liste_buyers.append(self.agents[i])
-            elif self.agents[i].supply > 0.0 and self.agents[i].supply >self.agents[i].demand:
-                self.agents[i].statu = 'seller'
-                self.liste_sellers.append(self.agents[i])
-
-        self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
-        self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
-        self.avg_price = 0
-
-        return {i: self.get_observation(i) for i in self._agents_ids}
-
-    def get_weighted_moy(self):
-        average_buyers = 0
-        average_sellers = 0
-        #print("demand total, supply total ",self.Demand_total, self.Supply_total)
-
-        if (self.Demand_total >0 and  self.Supply_total>0):
-            lambda_b = 1 - (self.Demand_total/(self.Demand_total + self.Supply_total))
-            lambda_s = 1 - (self.Supply_total/(self.Demand_total + self.Supply_total))
-        elif (self.Demand_total >0 and  self.Supply_total == 0):
-            lambda_b = 1
-            lambda_s = 0
-        elif (self.Demand_total == 0 and  self.Supply_total >0):
-            lambda_b = 0
-            lambda_s = 1
-        else:
-            lambda_b = 0
-            lambda_s = 0
-
-        if self.Demand_total >0:
-            for i in range(len(self.liste_buyers)):
-                if self.liste_buyers[i].statu == "buyer":
-                    average_buyers += (self.liste_buyers[i].demand/self.Demand_total)* self.liste_buyers[i].price
-
-        if self.Supply_total >0:
-            for i in range(len(self.liste_sellers)):
-                if self.liste_sellers[i].statu == "seller":
-                    average_sellers += (self.liste_sellers[i].supply/self.Supply_total)* self.liste_sellers[i].price
-
-        # print('\n lambda_b', lambda_b)
-        # print('lambda_s', lambda_s)
-        # print("self.Supply_total", self.Supply_total)
-        # print("self.Demand_total", self.Demand_total)
-        # print("average_sellers", average_sellers)
-        # print('average_buyers ', average_buyers)
-
-        moy = lambda_b*average_buyers + lambda_s*average_sellers
-        # print("moy", moy)
-        # print('\n')
-        return moy
-
-
-    def max_qtity_trx(self, buyer, seller, S, D, nb_buyers, nb_sellers):
-        Qi = buyer.demand
-        Qj = seller.supply
-        if D >= S:
-            alpha =S /(nb_buyers)
-        else:
-            alpha = D /(nb_sellers)
-
-        if min(Qi, Qj) <= alpha :
-            Qij = min(Qi, Qj)
-        else:
-            Qij = alpha
-        return Qij
-
-    def penalization(self, x, m, eps):
-        if (abs(x - m) > eps*m) and (x > m):
-            return abs(x - m*(1+eps))
-        elif (abs(x - m) > eps*m) and (x < m):
-            return abs(x - m*(1-eps))
-        else:
-            return 0
-
-    def tournoi_selection(self, liste, target):
-        lst = copy.copy(liste)
-        if len(lst) < 1:
-            print("pas de players")
-            return None
-
-        while len(lst) != 1:
-            qualified = []
-            while(lst):
-                if len(lst) >= 2:
-                    fight1 = random.sample(lst, 2)
-                    ## print("fight :", fight1)
-                    if abs(fight1[0].price - target) < abs(fight1[1].price - target):
-                        qualified.append(fight1[0])
-                    else:
-                        qualified.append(fight1[1])
-
-                    lst = list(set(lst) - set(fight1))
-
-                else:
-                    qualified.append(lst[0])
-                    lst = []
-
-            lst = qualified
-
-        return lst[0]
-
-    def find_closest_pair(self, team1, team2):
-        closest_pair = []
-        min_distance = float('inf')
-        for a in team1:
-            for b in team2:
-                distance = abs(a.price - b.price)  # Compute the absolute difference
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_pair = [a, b]
-
-        return closest_pair
-
-
-    def tournoi(self, m_global, choix = 'var1'):
-        #retourne toute les transactions; 1 transaction =  (id_acheteur, id_vendeur, quantity, price)
-
-        liste_trx = []
-        S = self.Supply_total
-        D = self.Demand_total
-        nb_buyers = len(self.liste_buyers)
-        nb_sellers = len(self.liste_sellers)
-        #m_global = self.get_weighted_moy()
-
-        if choix == 'var1':
-            while(len(self.liste_buyers) > 0 and len(self.liste_sellers)>0):
-                team_b1 = copy.copy(self.liste_buyers)
-                team_s1 = copy.copy(self.liste_sellers)
-
-                while(len(team_b1) > 0 and len(team_s1)>0):
-
-                    player_s = random.choice(team_s1)
-                    player_b = random.choice(team_b1)
-
-                    if abs(player_s.price - m_global) < abs(player_b.price - m_global):
-                        trx = Trx(player_b, player_s, self.max_qtity_trx(player_b, player_s, self.Supply_total, self.Demand_total, nb_buyers, nb_sellers), player_s.price)
-                        liste_trx.append(trx)
-                        #print(trx)
-                        player_b.demand -= trx.quantity
-                        player_s.supply -= trx.quantity
-                        D -= trx.quantity
-                        S -= trx.quantity
-                        team_b1.remove(player_b)
-                        team_s1.remove(player_s)
-                        if player_b.demand == 0:
-                            self.liste_buyers.remove(player_b)
-                            ##print('b delete')
-                        if player_s.supply == 0:
-                            self.liste_sellers.remove(player_s)
-                            ##print("s delete")
-
-                    elif abs(player_s.price - m_global) > abs(player_b.price - m_global):
-
-                        trx = Trx(player_b, player_s, self.max_qtity_trx(player_b, player_s, self.Supply_total,  self.Demand_total, nb_buyers, nb_sellers), player_b.price)
-                        liste_trx.append(trx)
-                        #print(trx)
-                        player_b.demand -= trx.quantity
-                        player_s.supply -= trx.quantity
-                        D -= trx.quantity
-                        S -= trx.quantity
-                        team_b1.remove(player_b)
-                        team_s1.remove(player_s)
-                        if player_b.demand == 0:
-                            self.liste_buyers.remove(player_b)
-                        if player_s.supply == 0:
-                            self.liste_sellers.remove(player_s)
-                    else :
-
-                        trx = Trx(player_b, player_s, self.max_qtity_trx(player_b, player_s, self.Supply_total,  self.Demand_total, nb_buyers, nb_sellers), m_global)
-                        liste_trx.append(trx)
-                        #print(trx)
-                        player_b.demand -= trx.quantity
-                        player_s.supply -= trx.quantity
-                        D -= trx.quantity
-                        S -= trx.quantity
-                        team_b1.remove(player_b)
-                        team_s1.remove(player_s)
-                        if player_b.demand == 0:
-                            self.liste_buyers.remove(player_b)
-                        if player_s.supply == 0:
-                            self.liste_sellers.remove(player_s)
-
-                #end while 1
-
-            #end while2
-
-            self.Demand_total_old = self.Demand_total
-            self.Supply_total_old = self.Supply_total
-
-            self.Demand_total = D
-            self.Supply_total = S
-
-            return liste_trx
-
-        elif choix == 'var2':
-            while((len(self.liste_buyers) >0) and (len(team_s) > 0)):
-
-                winner_buyer = self.tournoi_selection(self.liste_buyers, m_global)
-                winner_seller = self.tournoi_selection(team_s, m_global)
-
-                if abs(winner_seller.price - m_global) < abs(winner_buyer.price - m_global):
-                    #winner = seller
-                    trx = Trx(winner_buyer, winner_seller, max(winner_buyer.demand, winner_seller.supply), winner_seller.price)
-                    liste_trx.append(trx)
-                    winner_buyer.demand -= trx.quantity
-                    winner_seller.supply -= trx.quantity
-                    D -= trx.quantity
-                    S -= trx.quantity
-                    if winner_buyer.demand == 0:
-                        self.liste_buyers.remove(winner_buyer)
-                    if winner_seller.supply == 0:
-                        team_s.remove(winner_seller)
-
-                elif abs(winner_seller.price - m_global) > abs(winner_buyer.price - m_global):
-                    # winner = player_b
-                    trx = Trx(winner_buyer, winner_seller, max(winner_buyer.demand, winner_seller.supply), winner_buyer.price)
-                    liste_trx.append(trx)
-                    winner_buyer.demand -= trx.quantity
-                    winner_seller.supply -= trx.quantity
-                    D -= trx.quantity
-                    S -= trx.quantity
-                    if winner_buyer.demand == 0:
-                        self.liste_buyers.remove(winner_buyer)
-                    if winner_seller.supply == 0:
-                        team_s.remove(winner_seller)
-                else:
-                    trx = Trx(winner_buyer, winner_seller, max(winner_buyer.demand, winner_seller.supply), m_global)
-                    liste_trx.append(trx)
-                    winner_buyer.demand -= trx.quantity
-                    winner_seller.supply -= trx.quantity
-                    D -= trx.quantity
-                    S -= trx.quantity
-                    if winner_buyer.demand == 0:
-                        self.liste_buyers.remove(winner_buyer)
-                    if winner_seller.supply == 0:
-                        team_s.remove(winner_seller)
-
-
-            self.Demand_total_end = D
-            self.Supply_total_end = S
-
-            return liste_trx
-
-        elif choix == 'var3':
-            while(D > 0 and S > 0 ):
-
-                listes_couples =[]
-                team_s = copy.copy(self.liste_sellers)
-                team_b = copy.copy(self.liste_buyers)
-                while(len(team_s)> 0 and len(team_b)>0):
-                    results = self.find_closest_pair(team_b, team_s)
-                    listes_couples.append(results)
-
-                    if abs(results[1].price - m_global) < abs(results[0].price - m_global):
-                        #winner = seller
-                        trx = Trx(results[0], results[1], max(results[0].demand, results[1].supply), results[1].price)
-                        liste_trx.append(trx)
-                        results[0].demand -= trx.quantity
-                        results[1].supply -= trx.quantity
-                        D -= trx.quantity
-                        S -= trx.quantity
-
-                    elif abs(results[1].price - m_global) > abs(results[0].price - m_global):
-                        # winner = player_b
-                        trx = Trx(results[0], results[1], max(results[0].demand, results[1].supply), results[0].price)
-                        liste_trx.append(trx)
-                        results[0].demand -= trx.quantity
-                        results[1].supply -= trx.quantity
-                        D -= trx.quantity
-                        S -= trx.quantity
-
-                    else:
-                        trx = Trx(results[0], results[1], max(results[0].demand, results[1].supply), m_global)
-                        liste_trx.append(trx)
-                        results[0].demand -= trx.quantity
-                        results[1].supply -= trx.quantity
-                        D -= trx.quantity
-                        S -= trx.quantity
-
-                    team_b.remove(results[0])
-                    team_s.remove(results[1])
-
-            self.Demand_total_end = D
-            self.Supply_total_end = S
-
-            return liste_trx
-
-        else:
-            return liste_trx
-
-
-    def payoffs(self, moy, choice=None): #attention ici en argument ce sont des indices car les actions seront des element discret representant l'indice du prix choisi ds la liste strategies
-        L_payoffs = [0]*self.nb_agents
-
-        if choice is not None:
-            transactions = self.tournoi(moy, choice)
-        else:
-            transactions = self.tournoi(moy)
-    # [print(t)  for t in transactions]
-
-        # calcul le payoff u_i(x_i, x__i) du joueur i, avec l'action joué x=(x_1, ...., xn)
-        for t in transactions:
-            pen_seller = self.penalization(self.agents[t.seller.id].price, moy, 0.1)
-            L_payoffs[t.seller.id] += t.price * t.quantity - pen_seller  # - cost(t.quantity/2.)
-
-            pen_buyer = self.penalization(self.agents[t.buyer.id].price, moy, 0.1)
-            L_payoffs[t.buyer.id] += -1*(t.price * t.quantity) - pen_buyer  # - cost(t.quantity/2.)
-
-        return L_payoffs
-
-    def step(self, action_dict):
-        # Execute action
-        for i in self._agents_ids:
-            self.agents[i].price = self.liste_prix[action_dict[i]]
-
-        self.Demand_total_old = self.Demand_total
-        self.Supply_total_old = self.Supply_total
-
-        #determination des coeff lambda and avg
-        self.avg_price = self.get_weighted_moy()
-        for i in self._agents_ids:
-            self.info[i] = {"avg_price": self.avg_price, "agent_price": self.agents[i].price}
-
-        #calcul des payoffs
-        Liste_payoffs = self.payoffs(self.avg_price)
-        for id in self._agents_ids:
-            self.agents[id].payoff += Liste_payoffs[id]
-
-         # Update players listes to reflect the new state after transactions
-         # mettre a jour la nouvelle demand et supply du nouveau timestep, les listes de players; buyers, seller
-         # et demand total supply total precedent
-
-        self.avg_price_old = self.avg_price
-
-        for a in self._agents_ids:
-            self.agents[a].demand = self.L_conso[a][self.current_timestep]
-            self.agents[a].supply = max(0,self.L_prod[a][self.current_timestep] - self.agents[a].demand)
-            if self.agents[a].supply > self.agents[a].demand:
-                self.agents[a].statu = 'seller'
-            elif self.agents[a].supply < self.agents[a].demand:
-                self.agents[a].statu = 'buyer'
-            else:
-                self.agents[a].statu = 'observator'
-
-
-        self.liste_buyers = []
-        self.liste_sellers = []
-
-        for i in self._agents_ids:
-            #print(i)
-            #print(self.agents[i])
-            if self.agents[i].demand > 0.0 and self.agents[i].demand >self.agents[i].supply:
-                self.agents[i].statu = 'buyer'
-                self.liste_buyers.append(self.agents[i])
-            elif self.agents[i].supply > 0.0 and self.agents[i].supply >self.agents[i].demand:
-                self.agents[i].statu = 'seller'
-                self.liste_sellers.append(self.agents[i])
-
-        self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
-        self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
-
-
-        rewards = {i: self.get_reward(i) for i in self._agents_ids}
-        observations = {i: self.get_observation(i) for i in self._agents_ids}
-        self.current_timestep +=1
-        done = {i: self.is_done(i) for i in self._agents_ids}
+        rewards = {(m,i): self.get_reward(m,i) for m in range(self.nb_microgrids) for i in self.liste_microgrids[m]._agents_ids}
+        observations = {(m,i): self.get_observation(m, i) for m in range(self.nb_microgrids) for i in self.liste_microgrids[m]._agents_ids}
+        done = {(m,i): self.is_done(m,i) for m in range(self.nb_microgrids) for i in self.liste_microgrids[m]._agents_ids}
         done["__all__"] = all(done.values())
+        self.current_timestep +=1
 
 
         return observations, rewards, done, self.info
 
     def render(self):
         pass
+
+
+if __name__ == '__main__':
+
+#Création de 3 microgrids
+

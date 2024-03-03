@@ -48,6 +48,7 @@ class Microgrid():
         self.avg_price = 0
         self.microgrid_statu = 'ok' #can be 'ok', 'shortage', 'surplus'
         self.microgrid_energy = 0 #contains the need or surplus of energy for the microgrid after the trx within its members.
+        self.penalization_total = 0
 
         self.action_space = Discrete(len(self.liste_prix))
         self.observation_space = Box(low=np.array([-1, 0 ,0, 0, 0, 0, 0], dtype=np.float32), high=np.array([1, 10, 100, 100, 100, 100, 1], dtype=np.float32), shape=(7,), dtype=np.float32)
@@ -63,14 +64,6 @@ class Microgrid():
         else:
             return np.array([0, 0, self.Demand_total_old, self.Demand_total, self.Supply_total_old, self.Supply_total, self.avg_price_old], dtype=np.float32)
 
-    def get_reward(self, agent_id):
-        return self.agents[agent_id].payoff
-
-    def is_done(self, agent_id):
-        if self.current_timestep >= self.max_timesteps :
-            return True
-        else:
-            return False
 
     def reset(self):
 
@@ -114,6 +107,9 @@ class Microgrid():
         self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
         self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
         self.avg_price = 0
+        self.microgrid_statu = 'ok' #can be 'ok', 'shortage', 'surplus'
+        self.microgrid_energy = 0 #contains the need or surplus of energy for the microgrid after the trx within its members.
+        self.penalization_total = 0
 
         return {i: self.get_observation(i) for i in self._agents_ids}
 
@@ -231,31 +227,6 @@ class Microgrid():
                     team_s1 = copy.copy(self.liste_sellers)
 
                 while(len(team_b1) > 0 and len(team_s1)>0):
-                    
-                    #print team b1 et s1 et liste sellers buyers pour les comparer 
-                    #et s'assurer que la mise à jour de chaque joueur est correcte
-                    print("-----")
-                    print("-----")
-                    print("team b1:")
-                    for i in team_b1:
-                        print(i)
-                    print("-----")
-
-                    print("liste_buyers:")
-                    for i in self.liste_buyers:
-                        print(i)
-                    print("-----")
-
-                    print('team s1')
-                    for j in team_s1:
-                        print(j)
-                    print("-----")
-                    print("liste_sellers")
-                    for j in self.liste_sellers:
-                        print(j)
-                    print("-----")
-
-
 
                     player_s = random.choice(team_s1)
                     player_b = random.choice(team_b1)
@@ -364,8 +335,8 @@ class Microgrid():
                         self.liste_sellers.remove(winner_seller)
 
 
-            self.Demand_total_end = D
-            self.Supply_total_end = S
+            self.Demand_total = D
+            self.Supply_total = S
 
             return liste_trx
 
@@ -408,8 +379,8 @@ class Microgrid():
                     team_b.remove(results[0])
                     team_s.remove(results[1])
 
-            self.Demand_total_end = D
-            self.Supply_total_end = S
+            self.Demand_total = D
+            self.Supply_total = S
 
             return liste_trx
 
@@ -426,15 +397,6 @@ class Microgrid():
             transactions = self.tournoi(moy)
     # [print(t)  for t in transactions]
 
-        #update statu of microgrid
-        self.microgrid_energy = self.Supply_total - self.Demand_total 
-        if self.microgrid_energy > 0:
-            self.microgrid_statu = 'surplus'
-        elif self.microgrid_energy < 0:
-            self.microgrid_statu = 'shortage'
-        else:
-            self.microgrid_statu = 'ok'
-
 
         # calcul le payoff u_i(x_i, x__i) du joueur i, avec l'action joué x=(x_1, ...., xn)
         for t in transactions:
@@ -446,7 +408,39 @@ class Microgrid():
             print('pen buyer', pen_buyer)
             L_payoffs[t.buyer.id] += -1*(t.price * t.quantity) - pen_buyer  # - cost(t.quantity/2.)
 
+            self.penalization_total += pen_seller + pen_buyer
+
         return L_payoffs
+
+    def reward_fees(data_list, target):
+      """
+      This function distributes a reward to the 50% of elements in the list closest to the target value.
+      Returns:
+          A list containing the rewards for each element in the data_list.
+      """
+
+      # Calculate the absolute difference from the target for each element
+      abs_diffs = [abs(value - target) for value in data_list]
+
+      # Sort the data and absolute differences together based on absolute differences
+      sorted_data = sorted(zip(data_list, abs_diffs))
+      sorted_values, sorted_diffs = zip(*sorted_data)
+
+      # Find the index of the median absolute difference
+      median_index = int(len(sorted_diffs) / 2) 
+
+      # Select the 50% closest values (including the median)
+      closest_values = sorted_values[:median_index + 1]
+
+      # Create a list to store the rewards (initially all zeros)
+      rewards = [0] * len(data_list)
+
+      # Distribute a reward of 1 to the elements in the closest_values list
+      for value in closest_values:
+        index = data_list.index(value)
+        rewards[index] = 1
+
+      return rewards
 
 
 if __name__ == '__main__':
