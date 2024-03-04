@@ -42,6 +42,8 @@ class Microgrid():
             elif self.agents[i].supply > 0.0 and self.agents[i].supply >self.agents[i].demand:
                 self.agents[i].statu = 'seller'
                 self.liste_sellers.append(self.agents[i])
+            else:
+                self.agents[i].statu ='observator'
 
         self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
         self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
@@ -103,6 +105,8 @@ class Microgrid():
             elif self.agents[i].supply > 0.0 and self.agents[i].supply >self.agents[i].demand:
                 self.agents[i].statu = 'seller'
                 self.liste_sellers.append(self.agents[i])
+            else:
+                self.agents[i].statu ='observator'
 
         self.Demand_total = sum(buyer.demand for buyer in self.liste_buyers)
         self.Supply_total = sum(seller.supply for seller in self.liste_sellers)
@@ -412,35 +416,12 @@ class Microgrid():
 
         return L_payoffs
 
-    def reward_fees(data_list, target):
-      """
-      This function distributes a reward to the 50% of elements in the list closest to the target value.
-      Returns:
-          A list containing the rewards for each element in the data_list.
-      """
+    def distributions_fees(self, qtity):
+        for i in self._agents_ids:
+            if self.agents[i].statu != 'observator':
+                self.agents[i].payoffs += qtity
 
-      # Calculate the absolute difference from the target for each element
-      abs_diffs = [abs(value - target) for value in data_list]
-
-      # Sort the data and absolute differences together based on absolute differences
-      sorted_data = sorted(zip(data_list, abs_diffs))
-      sorted_values, sorted_diffs = zip(*sorted_data)
-
-      # Find the index of the median absolute difference
-      median_index = int(len(sorted_diffs) / 2) 
-
-      # Select the 50% closest values (including the median)
-      closest_values = sorted_values[:median_index + 1]
-
-      # Create a list to store the rewards (initially all zeros)
-      rewards = [0] * len(data_list)
-
-      # Distribute a reward of 1 to the elements in the closest_values list
-      for value in closest_values:
-        index = data_list.index(value)
-        rewards[index] = 1
-
-      return rewards
+      return
 
 
 if __name__ == '__main__':

@@ -94,19 +94,80 @@ class Microgridmulti(MultiAgentEnv):
                 self.liste_microgrids[m].info[(m,i)] = {"avg_price": self.liste_microgrids[m].avg_price, "agent_price": self.liste_microgrids[m].agents[i].price}
 
             #calcul des payoffs
+            nb_agents_actifs = 0.0
             Liste_payoffs[m] = self.liste_microgrids[m].payoffs(self.liste_microgrids[m].avg_price)
             for id in self.liste_microgrids[m]._agents_ids:
                 self.liste_microgrids[m].agents[id].payoff += Liste_payoffs[m][id]
+                if self.liste_microgrids[m].agents[id].statu != 'observator':
+                    nb_agents_actifs += 1
 
-         # Update players listes to reflect the new state after transactions
-         # mettre a jour la nouvelle demand et supply du nouveau timestep, les listes de players; buyers, seller
-         # et demand total supply total precedent
+            redistribution_fees_per_house = self.liste_microgrids[m].penalization_total / nb_agents_actifs
+            self.liste_microgrids[m].distributions_fees(redistribution_fees_per_house)
+
+            # Update players listes to reflect the new state after transactions
+            # mettre a jour la nouvelle demand et supply du nouveau timestep, les listes de players; buyers, seller
+            # et demand total supply total precedent
 
             self.liste_microgrids[m].avg_price_old = self.liste_microgrids[m].avg_price
 
+            #update statu of microgrid
+            self.liste_microgrids[m].microgrid_energy = self.liste_microgrids[m].Supply_total - self.liste_microgrids[m].Demand_total 
+            
+            if self.liste_microgrids[m].microgrid_energy > 0:
+                self.liste_microgrids[m].microgrid_statu = 'surplus'
+            elif self.liste_microgrids[m].microgrid_energy < 0:
+                self.liste_microgrids[m].microgrid_statu = 'shortage'
+            else:
+                self.liste_microgrids[m].microgrid_statu = 'ok'
+
+        #Transaction at microgrids level :
+        for i in self.liste_microgrids:
+            if i.microgrid_statu == 'shortage':
+                self.liste_microgrids_buyers.append(i)
+            elif i.microgrid_statu == 'surplus':
+                self.liste_microgrids_sellers.append(i)
+            else:
+                pass
+
+
+        while(len(self.liste_microgrids_sellers) > 0 and len(self.liste_microgrids_buyers) > 0):
+            microgrid_buyer, microgrid_seller = self.closest_pair_microgrids()
+            qtity_total = min(abs(microgrid_buyer.microgrid_energy), microgrid_seller.microgrid_energy)
+
+            microgrid_buyer.microgrid_energy += qtity_total
+            microgrid_seller.microgrid_energy -= qtity_total
+
+            nb_buyers = len(microgrid_buyer.liste_buyers)
+            nb_sellers = len(microgrid_seller.liste_sellers)
+            qtity_per_buyer = qtity_total/nb_buyers
+            qtity_per_seller = qtity_total/nb_sellers
+            
+            for k in range(len(microgrid_buyer.liste_buyers)):
+                if qtity_per_buyer > microgrid_buyer.liste_buyers[k].demand:
+                    qtity_total -= microgrid_buyer.liste_buyers[k].demand
+                    qtity_per_buyer = qtity_total/(nb_buyers-k)
+                    microgrid_buyer.liste_buyers[k].demand = 0
+                    microgrid_buyer.liste_buyers[k].payoff -= microgrid_seller.avg_price * microgrid_buyer.liste_buyers[k].demand 
+                else:
+                    qtity_total -= qtity_per_buyer
+                    microgrid_buyer.liste_buyers[k].demand -= qtity_per_buyer
+                    microgrid_buyer.liste_buyers[k].payoff -= microgrid_seller.avg_price * qtity_per_buyer
+
+            for k in microgrid_seller.liste_sellers:
+                microgrid_buyer.liste_buyers[k].supply -= qtity_per_seller
+                microgrid_buyer.liste_buyers[k].payoff += microgrid_seller.avg_price * qtity_per_seller
+
+            if microgrid_buyer.microgrid_energy == 0:
+                self.liste_microgrids_buyers.remove(microgrid_buyer)
+            if microgrid_seller.microgrid_energy == 0:
+                self.liste_microgrids_sellers.remove(microgrid_seller)     
+
+
+        #------------ mettre à jour avec les valeurs du nouveau state 
+        for m in range(len(self.liste_microgrids)):
             for a in self.liste_microgrids[m]._agents_ids:
-                self.liste_microgrids[m].agents[a].demand = self.liste_microgrids[m].L_conso[a][self.current_timestep]
-                self.liste_microgrids[m].agents[a].supply = max(0,self.liste_microgrids[m].L_prod[a][self.current_timestep] - self.liste_microgrids[m].agents[a].demand)
+                self.liste_microgrids[m].agents[a].demand = self.liste_microgrids[m].L_conso[a][self.current_timestep+1]
+                self.liste_microgrids[m].agents[a].supply = max(0,self.liste_microgrids[m].L_prod[a][self.current_timestep+1] - self.liste_microgrids[m].agents[a].demand)
                 if self.liste_microgrids[m].agents[a].supply > self.liste_microgrids[m].agents[a].demand:
                     self.liste_microgrids[m].agents[a].statu = 'seller'
                 elif self.liste_microgrids[m].agents[a].supply < self.liste_microgrids[m].agents[a].demand:
@@ -119,8 +180,6 @@ class Microgridmulti(MultiAgentEnv):
             self.liste_microgrids[m].liste_sellers = []
 
             for i in self.liste_microgrids[m]._agents_ids:
-                #print(i)
-                #print(self.agents[i])
                 if self.liste_microgrids[m].agents[i].demand > 0.0 and self.liste_microgrids[m].agents[i].demand >self.liste_microgrids[m].agents[i].supply:
                     self.liste_microgrids[m].agents[i].statu = 'buyer'
                     self.liste_microgrids[m].liste_buyers.append(self.liste_microgrids[m].agents[i])
@@ -130,55 +189,6 @@ class Microgridmulti(MultiAgentEnv):
 
             #self.liste_microgrids[m].Demand_total = sum(buyer.demand for buyer in self.liste_microgrids[m].liste_buyers)
             #self.liste_microgrids[m].Supply_total = sum(seller.supply for seller in self.liste_microgrids[m].liste_sellers) 
-
-            #update statu of microgrid
-            self.liste_microgrids[m].microgrid_energy = self.liste_microgrids[m].Supply_total - self.liste_microgrids[m].Demand_total 
-            
-            if self.liste_microgrids[m].microgrid_energy > 0:
-                self.liste_microgrids[m].microgrid_statu = 'surplus'
-            elif self.liste_microgrids[m].microgrid_energy < 0:
-                self.liste_microgrids[m].microgrid_statu = 'shortage'
-            else:
-                self.liste_microgrids[m].microgrid_statu = 'ok'
-
-
-        for i in self.liste_microgrids:
-            if i.microgrid_statu == 'shortage':
-                self.liste_microgrids_buyers.append(i)
-            elif i.microgrid_statu == 'surplus':
-                self.liste_microgrids_sellers.append(i)
-            else:
-                pass
-
-
-        while(len(self.liste_microgrids_sellers) > 0 and len(self.liste_microgrids_buyers) > 0):
-            microgrid_buyer, microgrid_seller = self.closest_pair_microgrids()
-            qtity = min(abs(microgrid_buyer.microgrid_energy), microgrid_seller.microgrid_energy)
-
-            nb_buyers = len(microgrid_buyer.liste_buyers)
-            nb_sellers = len(microgrid_seller.liste_sellers)
-            
-            for b in microgrid_buyer.liste_buyers:
-                b.demand -= qtity/nb_buyers
-
-            for s in microgrid_seller.liste_sellers:
-                s.supply -= qtity/nb_sellers
-
-            
-
-            microgrid_buyer.microgrid_energy += qtity
-            microgrid_seller.microgrid_energy -= qtity
-            if microgrid_buyer.microgrid_energy == 0:
-                self.liste_microgrids_buyers.remove(microgrid_buyer)
-            if microgrid_seller.microgrid_energy == 0:
-                self.liste_microgrids_sellers.remove(microgrid_seller)     
-
-
-
-
-
-
-#---------------------- completer les echanges
 
         rewards = {(m,i): self.get_reward(m,i) for m in range(self.nb_microgrids) for i in self.liste_microgrids[m]._agents_ids}
         observations = {(m,i): self.get_observation(m, i) for m in range(self.nb_microgrids) for i in self.liste_microgrids[m]._agents_ids}
