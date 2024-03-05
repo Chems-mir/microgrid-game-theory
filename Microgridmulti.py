@@ -1,10 +1,21 @@
 import Microgrid as M
+import Joueur as J
+import Trx as T
+import random
+import numpy as np
+
+import copy
+from gym.spaces import Discrete, Box
+
+from ray.rllib.env.multi_agent_env import MultiAgentEnv
+
 
 class Microgridmulti(MultiAgentEnv):
     def __init__(self, config):
         
         self.eval = False
         self.liste_microgrids = config['L_microgrids']
+        self.liste_prix = config['liste_prix']
         self.nb_microgrids = len(self.liste_microgrids)
         self.liste_microgrids_init = copy.deepcopy(self.liste_microgrids)
         self.current_timestep = 0
@@ -17,7 +28,7 @@ class Microgridmulti(MultiAgentEnv):
         self.action_space = Discrete(len(self.liste_prix)) #correspond à l'indice dans la liste de prix possible
         self.observation_space = Box(low=np.array([-1, 0 ,0, 0, 0, 0, 0], dtype=np.float32), high=np.array([1, 10, 100, 100, 100, 100, 1], dtype=np.float32), shape=(7,), dtype=np.float32)
         
-        self.info = {(i,j): {} for i in range(self.nb_microgrids) for j in range(len(self.liste_microgrids[i].nb_agents))} #i correspond au num du microgrid, et j au numero de house
+        self.info = {(i,j): {} for i in range(self.nb_microgrids) for j in range(self.liste_microgrids[i].nb_agents)} #i correspond au num du microgrid, et j au numero de house
     
 
     def get_observation(self, microgrid_id, agent_id):
@@ -305,4 +316,5 @@ if __name__ == '__main__':
     }
     Multi_microgrid = Microgridmulti(config_1)
 
-    
+    for m in Multi_microgrid:
+        print(m)

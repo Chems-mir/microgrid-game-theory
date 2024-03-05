@@ -1,4 +1,10 @@
 
+import Microgridmulti as Multi_M
+import numpy as np
+import Joueur as J
+import Trx as T
+import random
+import Microgrid as M
 from ray.rllib.algorithms.ppo import PPOConfig
 import matplotlib.pyplot as plt
 from ray.tune.logger import pretty_print
@@ -81,7 +87,7 @@ microgrid_config1 = {
         "L_solar": L_solar,
         "L_eolien": L_eolien
     }
-m1 = Microgrid(microgrid_config1)
+m1 = M.Microgrid(microgrid_config1)
 
 
 #MICROGRID2
@@ -92,7 +98,7 @@ for i in range(len(L_eolien)):
     L_eolien2.append(randomize_data(L_eolien[i], scale_factor=0.05))
     L_solar2.append(randomize_data(L_solar[i], scale_factor=0.05))
     L_conso2.append(randomize_data(L_conso[i], scale_factor=0.05))
-microgrid_config_2 = {
+microgrid_config2 = {
         "n": len(L_eolien2),
         "liste_prix" : liste_prix,
         "demand_total_prec" : demand_total_prec,
@@ -102,7 +108,7 @@ microgrid_config_2 = {
         "L_solar": L_solar2,
         "L_eolien": L_eolien2
 }
-m2 = Microgrid(microgrid_config2)
+m2 = M.Microgrid(microgrid_config2)
 
 
 #MICROGRID3
@@ -113,7 +119,7 @@ for i in range(len(L_eolien)):
     L_eolien3.append(randomize_data(L_eolien[i], scale_factor=0.05))
     L_solar3.append(randomize_data(L_solar[i], scale_factor=0.05))
     L_conso3.append(randomize_data(L_conso[i], scale_factor=0.05))
-microgrid_config_3 = {
+microgrid_config3 = {
         "n": len(L_eolien3),
         "liste_prix" : liste_prix,
         "demand_total_prec" : demand_total_prec,
@@ -123,20 +129,23 @@ microgrid_config_3 = {
         "L_solar": L_solar3,
         "L_eolien": L_eolien3
 }
-m3 = Microgrid(microgrid_config3)
+m3 = M.Microgrid(microgrid_config3)
 
 
 
 # Create instances of Microgridmulti:
 Liste_microgrids = [m1, m2, m3]     #liste of microgrid
 multi_config = {
-    "L_microgrids": Liste_microgrids
+    "L_microgrids": Liste_microgrids,
+    "liste_prix" : liste_prix,
 }
-Multi_microgrid = Microgridmulti(config_1)
+Multi_microgrid = Multi_M.Microgridmulti(multi_config)
 
-print(L_eolien3)
-print(L_solar3)
-print(L_conso3)
+# print(L_eolien3)
+# print(L_solar3)
+# print(L_conso3)
+for m in Multi_microgrid.liste_microgrids:
+    print(m)
 
 
 

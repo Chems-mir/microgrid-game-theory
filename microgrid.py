@@ -421,7 +421,7 @@ class Microgrid():
             if self.agents[i].statu != 'observator':
                 self.agents[i].payoffs += qtity
 
-      return
+        return
 
 
 if __name__ == '__main__':
