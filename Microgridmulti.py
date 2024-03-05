@@ -133,14 +133,19 @@ class Microgridmulti(MultiAgentEnv):
         while(len(self.liste_microgrids_sellers) > 0 and len(self.liste_microgrids_buyers) > 0):
             microgrid_buyer, microgrid_seller = self.closest_pair_microgrids()
             qtity_total = min(abs(microgrid_buyer.microgrid_energy), microgrid_seller.microgrid_energy)
+            qtity_total_s = qtity_total
 
             microgrid_buyer.microgrid_energy += qtity_total
-            microgrid_seller.microgrid_energy -= qtity_total
+            microgrid_seller.microgrid_energy -= qtity_total_s
 
             nb_buyers = len(microgrid_buyer.liste_buyers)
             nb_sellers = len(microgrid_seller.liste_sellers)
             qtity_per_buyer = qtity_total/nb_buyers
-            qtity_per_seller = qtity_total/nb_sellers
+            qtity_per_seller = qtity_total_s/nb_sellers
+
+            microgrid_buyer.liste_buyers = sorted(microgrid_buyer.liste_buyers, key=lambda x: x.price)
+            microgrid_buyer.liste_sellers = sorted(microgrid_buyer.liste_sellers, key=lambda x: x.price)
+
             
             for k in range(len(microgrid_buyer.liste_buyers)):
                 if qtity_per_buyer > microgrid_buyer.liste_buyers[k].demand:
@@ -153,16 +158,25 @@ class Microgridmulti(MultiAgentEnv):
                     microgrid_buyer.liste_buyers[k].demand -= qtity_per_buyer
                     microgrid_buyer.liste_buyers[k].payoff -= microgrid_seller.avg_price * qtity_per_buyer
 
-            for k in microgrid_seller.liste_sellers:
-                microgrid_buyer.liste_buyers[k].supply -= qtity_per_seller
-                microgrid_buyer.liste_buyers[k].payoff += microgrid_seller.avg_price * qtity_per_seller
+            for k in range(len(microgrid_seller.liste_sellers)):
+                if qtity_per_seller > microgrid_seller.liste_sellers[k].supply:
+                    qtity_total_s -= microgrid_seller.liste_sellers[k].supply
+                    qtity_per_seller = qtity_total_s/(nb_sellers-k)
+                    microgrid_seller.liste_sellers[k].supply = 0
+                    microgrid_seller.liste_sellers[k].payoff += microgrid_seller.avg_price * microgrid_seller.liste_sellers[k].supply
+
+                else:
+                    qtity_total_s -= qtity_per_seller
+                    microgrid_seller.liste_sellers[k].supply -= qtity_per_seller
+                    microgrid_seller.liste_sellers[k].payoff += microgrid_seller.avg_price * qtity_per_seller
+
 
             if microgrid_buyer.microgrid_energy == 0:
                 self.liste_microgrids_buyers.remove(microgrid_buyer)
             if microgrid_seller.microgrid_energy == 0:
                 self.liste_microgrids_sellers.remove(microgrid_seller)     
 
-
+        #fin du while
         #------------ mettre à jour avec les valeurs du nouveau state 
         for m in range(len(self.liste_microgrids)):
             for a in self.liste_microgrids[m]._agents_ids:
