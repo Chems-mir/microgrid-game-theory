@@ -316,5 +316,4 @@ if __name__ == '__main__':
     }
     Multi_microgrid = Microgridmulti(config_1)
 
-    for m in Multi_microgrid:
-        print(m)
+

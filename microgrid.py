@@ -9,7 +9,10 @@ import random
 
 
 class Microgrid():
+    cpt= 0
     def __init__(self, config):
+        self.id = Microgrid.cpt
+        Microgrid.cpt += 1
         self.nb_agents = config['n']
         self.L_conso = config['L_conso']
         self.L_prod =  [x + y for x, y in zip(config['L_solar'], config['L_eolien'])]
@@ -21,9 +24,11 @@ class Microgrid():
         #J(demand, produced, localisation, action):
         for i in range(self.nb_agents):
             h = J.Joueur(self.L_conso[i][0], self.L_prod[i][0], [0,1])
-            self.agents[i] = h
+            self.agents[h.id] = h
 
         self._agents_ids = set(self.agents.keys())
+        print('ag ids', self._agents_ids)
+        
         self.liste_prix = config['liste_prix']
         self.demand_total_init = config['demand_total_prec']
         self.supply_total_init = config['supply_total_prec']
@@ -57,6 +62,9 @@ class Microgrid():
         self.info = {i: {} for i in self._agents_ids}
 
 
+    def __str__(self):
+        return f"Microgrid id {self.id} nb_agents ({self.nb_agents}); \n Demand_total :{self.Demand_total}; \n Supply_total:{self.Supply_total}; \n avg_price:{self.avg_price}\n \n"
+
 
     def get_observation(self, agent_id):
         if self.agents[agent_id].statu == 'seller':
@@ -82,14 +90,15 @@ class Microgrid():
                 self.L_prod[i] =  randomize_data(self.L_prod[i], eval = True)
 
         self.agents = {} #contient les joueurs en tant qu'objet
-
+        self.nb_agents = config['n']
         J.Joueur.cpt =0
         #J(demand, produced, localisation, action):
         for i in range(self.nb_agents):
+            print('i',i)
             h = J.Joueur(self.L_conso[i][0], self.L_prod[i][0], [0,1])
-            self.agents[i] = h
+            self.agents[h.id] = h
 
-        self.nb_agents = len(self.agents)
+
         self._agents_ids = set(self.agents.keys())
         self.Demand_total_old = self.demand_total_init
         self.Supply_total_old = self.supply_total_init
@@ -223,6 +232,15 @@ class Microgrid():
         if choix == 'var1':
             team_b1 = copy.copy(self.liste_buyers)
             team_s1 = copy.copy(self.liste_sellers)
+            print('J.cpt',J.cpt)
+            for j in team_b1:
+                print(j)
+            for k in self.liste_buyers:
+                print(k)
+            for p in team_s1:
+                print(p)
+            for m in self.liste_sellers: 
+                print(m)
 
             while(len(self.liste_buyers) > 0 and len(self.liste_sellers)>0):
                 if len(team_b1) == 0:
@@ -404,6 +422,7 @@ class Microgrid():
 
         # calcul le payoff u_i(x_i, x__i) du joueur i, avec l'action joué x=(x_1, ...., xn)
         for t in transactions:
+            print(t)
             pen_seller = self.penalization(self.agents[t.seller.id].price, moy, 0.12)
             print('pen seller', pen_seller)
             L_payoffs[t.seller.id] += t.price * t.quantity - pen_seller  # - cost(t.quantity/2.)
@@ -419,7 +438,7 @@ class Microgrid():
     def distributions_fees(self, qtity):
         for i in self._agents_ids:
             if self.agents[i].statu != 'observator':
-                self.agents[i].payoffs += qtity
+                self.agents[i].payoff += qtity
 
         return
 

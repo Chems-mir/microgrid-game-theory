@@ -4,6 +4,7 @@ import numpy as np
 import Joueur as J
 import Trx as T
 import random
+from collections import deque
 import Microgrid as M
 from ray.rllib.algorithms.ppo import PPOConfig
 import matplotlib.pyplot as plt
@@ -98,6 +99,20 @@ for i in range(len(L_eolien)):
     L_eolien2.append(randomize_data(L_eolien[i], scale_factor=0.05))
     L_solar2.append(randomize_data(L_solar[i], scale_factor=0.05))
     L_conso2.append(randomize_data(L_conso[i], scale_factor=0.05))
+
+#decalage des elements pour simuler un decalage horaire
+eo2 = deque(L_eolien2)
+eo2.rotate(2)  # décale de n vers la droite
+L_eolien2 = list(eo2)
+
+sol2 = deque(L_solar2)
+sol2.rotate(2)
+L_solar2  = list(sol2)
+
+conso2 = deque(L_conso2)
+conso2.rotate(2)
+L_conso2 = list(conso2)
+
 microgrid_config2 = {
         "n": len(L_eolien2),
         "liste_prix" : liste_prix,
@@ -111,6 +126,7 @@ microgrid_config2 = {
 m2 = M.Microgrid(microgrid_config2)
 
 
+
 #MICROGRID3
 L_eolien3 = []
 L_conso3 = []
@@ -119,6 +135,20 @@ for i in range(len(L_eolien)):
     L_eolien3.append(randomize_data(L_eolien[i], scale_factor=0.05))
     L_solar3.append(randomize_data(L_solar[i], scale_factor=0.05))
     L_conso3.append(randomize_data(L_conso[i], scale_factor=0.05))
+
+#decalage des elements pour simuler un decalage horaire
+eo3 = deque(L_eolien3)
+eo3.rotate(-2)  # décale de n vers la gauche
+L_eolien3 = list(eo3)
+
+sol3 = deque(L_solar3)
+sol3.rotate(-2)
+L_solar3  = list(sol3)
+
+conso3 = deque(L_conso3)
+conso3.rotate(-2)
+L_conso3 = list(conso3)
+
 microgrid_config3 = {
         "n": len(L_eolien3),
         "liste_prix" : liste_prix,
@@ -133,6 +163,7 @@ m3 = M.Microgrid(microgrid_config3)
 
 
 
+
 # Create instances of Microgridmulti:
 Liste_microgrids = [m1, m2, m3]     #liste of microgrid
 multi_config = {
@@ -144,8 +175,31 @@ Multi_microgrid = Multi_M.Microgridmulti(multi_config)
 # print(L_eolien3)
 # print(L_solar3)
 # print(L_conso3)
-for m in Multi_microgrid.liste_microgrids:
-    print(m)
+#for m in Multi_microgrid.liste_microgrids:
+   # for identifiant, agent in m.agents.items():
+       # agent.price = random.choice(liste_prix)
+        #print(agent)
+    #m.avg_price = m.get_weighted_moy()
+    #print(m)
+
+#actions 
+actions_dict = {}
+
+for m_id, microgrid in enumerate(Multi_microgrid.liste_microgrids):
+    for agent_id in range(microgrid.nb_agents):
+        print('m_id' ,m_id, 'microgrid:', microgrid)
+        print('agent id ',agent_id)
+        # Generating a random action index based on the action space size
+        action_index = random.randint(0, len(microgrid.liste_prix) - 1)
+        actions_dict[(m_id, agent_id)] = action_index
+
+print("actions dico ", actions_dict)
+Multi_microgrid.step(actions_dict)
+obs, rewards, done, info = Multi_microgrid.step(actions_dict)
+print("obs", obs)
+print("rewards: ",rewards)
+print("done ", done)
+print("infos: ", info)
 
 
 
