@@ -49,7 +49,7 @@ consomations_H4 = np.array([0.253, 0.204, 0.384, 0.274, 0.318, 0.339, 0.476, 1.7
 consomations_H5 = np.array([0.108, 0.246, 0.404, 0.205, 0.235, 0.237, 0.615, 2.971, 2.259, 1.716, 2.464, 1.890, 1.941, 1.530, 1.096, 1.305, 1.266, 1.479, 1.387, 3.556, 3.079, 2.725, 3.652, 0.218])
 consomations_H6 = np.array([0.236, 0.071, 0.356, 0.297, 0.306, 0.360, 0.710, 3.365, 1.644, 2.587, 1.881, 1.849, 1.283, 0.777, 1.116, 0.978, 0.953, 1.601, 1.386, 2.500, 2.162, 1.908, 2.611, 0.118])
 
-L_conso = [consomations_H1, consomations_H2, consomations_H3, consomations_H4, consomations_H5, consomations_H6]
+L_conso = [consomations_H1, consomations_H2, consomations_H3]#, consomations_H4, consomations_H5, consomations_H6]
 
 produced_solar_H1 = np.array([0]*24)
 produced_solar_H2 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.045, 0.23, 1.037, 1.80, 2.32, 2.56, 2.56, 2.18, 1.9, 1.3, 0.43, 0.01, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -58,7 +58,7 @@ produced_solar_H4 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.001, 0.04, 0.40, 1
 produced_solar_H5 = np.array([0]*24)
 produced_solar_H6 =  np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.034, 0.38, 2.0, 2.92, 2.56, 2.76, 3.5, 3.2, 2.97, 2.5, 0.91, 0.2, 0.10, 0.0, 0.0, 0.0, 0.0 ])
 
-L_solar = [produced_solar_H1, produced_solar_H2, produced_solar_H3, produced_solar_H4, produced_solar_H5, produced_solar_H6]
+L_solar = [produced_solar_H1, produced_solar_H2, produced_solar_H3] # , produced_solar_H4, produced_solar_H5, produced_solar_H6]
 
 produced_eolien_H1 = np.array([0]*24)
 produced_eolien_H2 = np.array([0.247, 0.242, 0.217, 0.199, 0.18 , 0.159, 0.156, 0.152, 0.134, 0.095, 0.07 , 0.073, 0.065, 0.058, 0.056, 0.057, 0.056, 0.057, 0.067, 0.077, 0.102, 0.126, 0.135, 0.153])*2
@@ -67,7 +67,7 @@ produced_eolien_H4 = np.array([0.259, 0.252, 0.23 , 0.215, 0.19 , 0.17 , 0.164, 
 produced_eolien_H5 = np.array([0]*24)
 produced_eolien_H6 = np.array([0.28, 0.27, 0.27 , 0.238, 0.22, 0.194, 0.182, 0.17 , 0.17, 0.15, 0.13, 0.10, 0.085, 0.066, 0.06, 0.06, 0.055, 0.0656, 0.0761, 0.087, 0.13  , 0.152, 0.156, 0.16])*2
 
-L_eolien = [produced_eolien_H1, produced_eolien_H2, produced_eolien_H3, produced_eolien_H4, produced_eolien_H5, produced_eolien_H6]
+L_eolien = [produced_eolien_H1, produced_eolien_H2, produced_eolien_H3 ]#, produced_eolien_H4, produced_eolien_H5, produced_eolien_H6]
 price_sp_rachat = 0.06
 price_sp =  0.28
 step = 0.01
@@ -187,21 +187,20 @@ actions_dict = {}
 
 for m_id, microgrid in enumerate(Multi_microgrid.liste_microgrids):
     for agent_id in range(microgrid.nb_agents):
-        print('m_id' ,m_id, 'microgrid:', microgrid)
-        print('agent id ',agent_id)
         # Generating a random action index based on the action space size
         action_index = random.randint(0, len(microgrid.liste_prix) - 1)
         actions_dict[(m_id, agent_id)] = action_index
 
-print("actions dico ", actions_dict)
-Multi_microgrid.step(actions_dict)
-obs, rewards, done, info = Multi_microgrid.step(actions_dict)
+while True:
+    obs, rewards, done, info = Multi_microgrid.step(actions_dict)
+    if done["__all__"]:
+        break
+
 print("obs", obs)
 print("rewards: ",rewards)
 print("done ", done)
 print("infos: ", info)
 
-
-
-
-
+print(L_conso3)
+print(L_conso2)
+print(L_conso)

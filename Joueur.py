@@ -1,8 +1,7 @@
 class Joueur():
-    cpt =0
-    def __init__(self, demand, produced, localisation):
-        self.id = Joueur.cpt #attention ne pas creer de joueur qui ne sont pas dans le jeu sinon les ids ne seront pas continues
-        Joueur.cpt += 1
+    def __init__(self, id, demand, produced, localisation):
+        self.id = id #attention ne pas creer de joueur qui ne sont pas dans le jeu sinon les ids ne seront pas continues
+
         self.demand = demand
         self.produced = produced
         self.localisation = localisation
